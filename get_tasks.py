@@ -6,13 +6,18 @@ from __future__ import absolute_import, print_function, unicode_literals
 import os
 
 from caldav import DAVClient
+from sleekxmpp import ClientXMPP
 
 
 CARDDAV_ENDPOINT = 'https://<example.net>/dav.php'
-USER = '<user>'
-PASSWORD = '<passwd>'
-CALENDAR_PATH = 'calendars/{}/default/'.format(USER)
+CARDDAV_USER = '<carddav_user>'
+CARDDAV_PASSWORD = '<carddav_password>'
+CALENDAR_PATH = 'calendars/{}/default/'.format(CARDDAV_USER)
 ALARM_LOCATION = 'front door'
+
+DOOR_JID = 'front_door@jabber.<example.net>'
+DOOR_PASSWORD = '<jabber_password>'
+NOTIFICATION_RECIPIENT = '<jabber_user>@jabber.<example.net>'
 
 
 class TaskClient(object):
@@ -56,9 +61,48 @@ class TaskClient(object):
         }
 
 
+class NotificationClient(ClientXMPP):
+    def __init__(self, jid, password, recipient, tasks):
+        super(NotificationClient, self).__init__(jid, password)
+
+        self._recipient = recipient
+        self._message = NotificationClient._format_message(tasks)
+
+        self.add_event_handler('session_start', self._start)
+
+    @staticmethod
+    def _format_message(items):
+        return '\n'.join([' - {}'.format(item) for item in items])
+
+    def _start(self, event):
+        self.send_presence()
+        self.get_roster()
+
+        self.send_message(mto=self._recipient, mbody=self._message)
+
+        self.disconnect(wait=True)
+
+
 if __name__ == '__main__':
-    task_client = TaskClient(CARDDAV_ENDPOINT, USER, PASSWORD, CALENDAR_PATH)
+    print('Retrieving tasks...')
+    task_client = TaskClient(
+        CARDDAV_ENDPOINT,
+        CARDDAV_USER,
+        CARDDAV_PASSWORD,
+        CALENDAR_PATH
+    )
     tasks = task_client.retrieve_tasks()
 
-    for task in tasks:
-        print(' -', task)
+    jabber = NotificationClient(
+        DOOR_JID,
+        DOOR_PASSWORD,
+        NOTIFICATION_RECIPIENT,
+        tasks,
+    )
+
+    print('Sending notification...')
+    if jabber.connect():
+        jabber.process(block=True)
+        print(' done')
+    else:
+        print(' unable to connect :(')
