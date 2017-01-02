@@ -15,41 +15,50 @@ CALENDAR_PATH = 'calendars/{}/default/'.format(USER)
 ALARM_LOCATION = 'front door'
 
 
-def _login(server, user, password):
-    client = DAVClient(server, username=user, password=password)
-    return client.principal()
+class TaskClient(object):
 
+    def __init__(self, server, username, password, calendar):
+        self._calendar = TaskClient._select_calendar(
+            os.path.join(server, calendar),
+            TaskClient._login(server, username, password).calendars()
+        )
 
-def _retrieve_tasks(user):
-    alarmable_tasks = []
+    @staticmethod
+    def _login(server, username, password):
+        return DAVClient(
+            server,
+            username=username,
+            password=password
+        ).principal()
 
-    calendar = _select_calendar(user.calendars())
-    for todo in calendar.todos():
-        data = _parse_data(todo.data)
-        if data.get('LOCATION', '').lower() == ALARM_LOCATION:
-            alarmable_tasks.append(data['SUMMARY'].strip())
+    def retrieve_tasks(self):
+        alarmable_tasks = []
 
-    return alarmable_tasks
+        for todo in self._calendar.todos():
+            data = TaskClient._parse_data(todo.data)
+            if data.get('LOCATION', '').lower() == ALARM_LOCATION:
+                alarmable_tasks.append(data['SUMMARY'].strip())
 
+        return alarmable_tasks
 
-def _select_calendar(calendars):
-    return [
-        calendar for calendar in calendars
-        if calendar.url == os.path.join(CARDDAV_ENDPOINT, CALENDAR_PATH)
-    ].pop()
+    @staticmethod
+    def _select_calendar(calendar_url, calendars):
+        return [
+            calendar for calendar in calendars
+            if calendar.url == calendar_url
+        ].pop()
 
-
-def _parse_data(data):
-    return {
-        key: value for key, value in
-        [line.split(':') for line in data.split('\n') if line]
-    }
+    @staticmethod
+    def _parse_data(data):
+        return {
+            key: value for key, value in
+            [line.split(':') for line in data.split('\n') if line]
+        }
 
 
 if __name__ == '__main__':
-    user = _login(CARDDAV_ENDPOINT, USER, PASSWORD)
-    tasks = _retrieve_tasks(user)
+    task_client = TaskClient(CARDDAV_ENDPOINT, USER, PASSWORD, CALENDAR_PATH)
+    tasks = task_client.retrieve_tasks()
 
     for task in tasks:
         print(' -', task)
-
