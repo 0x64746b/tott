@@ -4,6 +4,8 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 import os
+import subprocess
+import sys
 
 from caldav import DAVClient
 from sleekxmpp import ClientXMPP
@@ -18,6 +20,19 @@ ALARM_LOCATION = 'front door'
 DOOR_JID = 'front_door@jabber.<example.net>'
 DOOR_PASSWORD = '<jabber_password>'
 NOTIFICATION_RECIPIENT = '<jabber_user>@jabber.<example.net>'
+RECIPIENT_NETWORK_ADDRESS = '192.168.0.<xx>'
+
+
+class LocationChecker(object):
+
+    @staticmethod
+    def is_present(network_address):
+        with open(os.devnull, 'wb') as dev_null:
+            exit_code = subprocess.call(
+                ['ping', '-c1', network_address],
+                stdout=dev_null
+            )
+        return not bool(exit_code)
 
 
 class TaskClient(object):
@@ -84,6 +99,11 @@ class NotificationClient(ClientXMPP):
 
 
 if __name__ == '__main__':
+    print('Checking recipient...')
+    if not LocationChecker.is_present(RECIPIENT_NETWORK_ADDRESS):
+        print(' nothing to do: recipient not on network')
+        sys.exit()
+
     print('Retrieving tasks...')
     task_client = TaskClient(
         CARDDAV_ENDPOINT,
